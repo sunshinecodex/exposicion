@@ -1,0 +1,200 @@
+import numpy as np
+import pandas as pd
+from types import MethodType
+
+class LinearModel:
+    '''
+    Simple linear model with a single output (y) given the covariates x_1...x_M of the form:
+    y = w_1 * x_1 + ... + w_M * x_M + b
+    where M = number of features, w are the weights, and b is the bias.
+    '''
+    def __init__(self):
+        self.w = None
+        self.b = None 
+    
+    def evaluate_proposal(self, data, theta):
+        self.encode(theta)
+        prediction = self.predict(data)
+        return prediction
+
+    def predict(self, x_in):
+        y_out = x_in.dot(self.w) + self.b 
+        return y_out
+    
+    def encode(self, theta):
+        self.w = theta[0:-1]
+        self.b = theta[-1]
+
+def likelihood_function(self, theta, tausq, test=False):
+    if test:
+        x_data = self.x_test
+        y_data = self.y_test
+    else:
+        x_data = self.x_data
+        y_data = self.y_data
+
+    model_prediction = self.model.evaluate_proposal(x_data, theta)
+    model_simulation = model_prediction + np.random.normal(0, tausq, size=model_prediction.shape) 
+    accuracy = self.rmse(model_prediction, y_data)
+    log_likelihood = np.sum(-0.5 * np.log(2 * np.pi * tausq) - 0.5 * np.square(y_data - model_prediction) / tausq)
+    return [log_likelihood, model_prediction, model_simulation, accuracy]
+
+def prior(self, sigma_squared, nu_1, nu_2, theta, tausq):
+    n_params = self.theta_size
+    part1 = -1 * (n_params / 2) * np.log(sigma_squared)
+    part2 = 1 / (2 * sigma_squared) * (sum(np.square(theta)))
+    log_prior = part1 - part2 - (1 + nu_1) * np.log(tausq) - (nu_2 / tausq)
+    return log_prior
+
+def sampler(self):
+    pos_theta = np.ones((self.n_samples, self.theta_size))
+    pos_tau = np.ones((self.n_samples, 1))
+    pos_eta = np.ones((self.n_samples, 1))
+    pred_y = np.zeros((self.n_samples, self.x_data.shape[0]))
+    sim_y = np.zeros((self.n_samples, self.x_data.shape[0]))
+    rmse_data = np.zeros(self.n_samples)
+    test_pred_y = np.ones((self.n_samples, self.x_test.shape[0]))
+    test_sim_y = np.ones((self.n_samples, self.x_test.shape[0]))
+    test_rmse_data = np.zeros(self.n_samples)
+    theta = np.random.randn(self.theta_size)
+    pred_y[0,] = self.model.evaluate_proposal(self.x_data, theta)
+    eta = np.log(np.var(pred_y[0,] - self.y_data))
+    tausq_proposal = np.exp(eta)
+    prior_val = self.prior(self.sigma_squared, self.nu_1, self.nu_2, theta, tausq_proposal)
+    [likelihood, pred_y[0,], sim_y[0,], rmse_data[0]] = self.likelihood_function(theta, tausq_proposal)
+    n_accept = 0
+
+    for ii in np.arange(1, self.n_samples):
+        theta_proposal = theta + np.random.normal(0, self.step_theta, self.theta_size)
+        eta_proposal = eta + np.random.normal(0, self.step_eta, 1)
+        tausq_proposal = np.exp(eta_proposal)   
+        prior_proposal = self.prior(self.sigma_squared, self.nu_1, self.nu_2, theta_proposal, tausq_proposal)
+        [likelihood_proposal, pred_y[ii,], sim_y[ii,], rmse_data[ii]] = self.likelihood_function(theta_proposal, tausq_proposal)
+        [_, test_pred_y[ii,], test_sim_y[ii,], test_rmse_data[ii]] = self.likelihood_function(theta_proposal, tausq_proposal, test=True)
+        diff_likelihood = likelihood_proposal - likelihood
+        diff_prior = prior_proposal - prior_val
+        mh_prob = min(1, np.exp(diff_likelihood + diff_prior))
+        u = np.random.uniform(0, 1)
+        if u < mh_prob:
+            n_accept += 1
+            likelihood = likelihood_proposal
+            prior_val = prior_proposal
+            theta = theta_proposal
+            eta = eta_proposal
+            pos_theta[ii,] = theta_proposal
+            pos_tau[ii,] = tausq_proposal
+            pos_eta[ii,] = eta_proposal
+        else:
+            pos_theta[ii,] = pos_theta[ii-1,]
+            pos_tau[ii,] = pos_tau[ii-1,]
+            pos_eta[ii,] = pos_eta[ii-1,]
+
+    accept_rate = (n_accept / self.n_samples) * 100
+    print('{:.3f}% were accepted'.format(accept_rate))
+    self.pos_theta = pos_theta[self.n_burnin:, ]
+    self.pos_tau = pos_tau[self.n_burnin:, ] 
+    self.pos_eta = pos_eta[self.n_burnin:, ]
+    self.rmse_data = rmse_data[self.n_burnin:]
+    results_dict = {'w{}'.format(_): self.pos_theta[:, _].squeeze() for _ in range(self.theta_size-1)}
+    results_dict['b'] = self.pos_theta[:, -1].squeeze()
+    results_dict['tau'] = self.pos_tau.squeeze()
+    results_dict['rmse'] = self.rmse_data.squeeze()
+    results_df = pd.DataFrame.from_dict(results_dict)
+    return results_df
+
+def model_draws(self, num_samples=10):
+    pred_y = np.zeros((num_samples, self.x_data.shape[0]))
+    sim_y = np.zeros((num_samples, self.x_data.shape[0]))
+    for ii in range(num_samples):
+        theta_drawn = np.random.normal(self.pos_theta.mean(axis=0), self.pos_theta.std(axis=0), self.theta_size)
+        tausq_drawn = np.random.normal(self.pos_tau.mean(), self.pos_tau.std())
+        [_, pred_y[ii,], sim_y[ii,], _] = self.likelihood_function(theta_drawn, tausq_drawn)
+    return pred_y, sim_y
+
+def rmse(self, predictions, targets):
+    return np.sqrt(((predictions - targets) ** 2).mean())
+
+class MCMC:
+    def __init__(self, n_samples, n_burnin, x_data, y_data, x_test, y_test):
+        self.n_samples = n_samples
+        self.n_burnin = n_burnin
+        self.x_data = x_data
+        self.y_data = y_data
+        self.x_test = x_test
+        self.y_test = y_test
+        self.theta_size = x_data.shape[1] + 1
+        self.step_theta = 0.02
+        self.step_eta = 0.01
+        self.sigma_squared = 5
+        self.nu_1 = 0
+        self.nu_2 = 0
+        self.model = LinearModel()
+        self.pos_theta = None
+        self.pos_tau = None
+        self.rmse_data = None
+        self.likelihood_function = MethodType(likelihood_function, self)
+        self.prior = MethodType(prior, self)
+        self.sampler = MethodType(sampler, self)
+        self.model_draws = MethodType(model_draws, self)
+        self.rmse = MethodType(rmse, self)
+
+n_samples = 20000
+burn_in = int(n_samples * 0.25)
+n_data = 100
+n_features = 1
+x_data = np.repeat(np.expand_dims(np.linspace(0, 1, n_data), axis=-1), n_features, axis=1)
+y_data = 3 * x_data[:, 0] + 4 + np.random.randn(n_data) * 0.5
+x_test = x_data.copy()  # Simulated test data
+y_test = 3 * x_test[:, 0] + 4 + np.random.randn(n_data) * 0.5
+
+mcmc = MCMC(n_samples, burn_in, x_data, y_data, x_test, y_test)
+results = mcmc.sampler()
+pred_y, sim_y = mcmc.model_draws(num_samples=100)
+print('Resultados:', results)
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Asegurémonos de tener los datos necesarios
+n_samples = 20000
+burn_in = int(n_samples * 0.25)
+n_data = 100
+n_features = 1
+x_data = np.repeat(np.expand_dims(np.linspace(0, 1, n_data), axis=-1), n_features, axis=1)
+y_data = 3 * x_data[:, 0] + 4 + np.random.randn(n_data) * 0.5
+x_test = x_data.copy()  # Datos de prueba simulados
+y_test = 3 * x_test[:, 0] + 4 + np.random.randn(n_data) * 0.5
+
+# Suponiendo que tienes la clase MCMC y otros componentes ya definidos
+mcmc = MCMC(n_samples, burn_in, x_data, y_data, x_test, y_test)
+results = mcmc.sampler()
+pred_y, sim_y = mcmc.model_draws(num_samples=100)
+
+# Generar el gráfico
+plt.figure(figsize=(14, 7))
+
+# Valores reales vs predichos
+plt.subplot(1, 2, 1)
+plt.plot(mcmc.y_test, label='Actual')
+plt.plot(pred_y.mean(axis=0), label='Predicted Mean')
+plt.fill_between(np.arange(mcmc.y_test.size), 
+                 pred_y.mean(axis=0) - 2 * pred_y.std(axis=0), 
+                 pred_y.mean(axis=0) + 2 * pred_y.std(axis=0), 
+                 color='gray', alpha=0.2, label='Confidence Interval (95%)')
+plt.title('Actual vs Predicted')
+plt.xlabel('Data Points')
+plt.ylabel('Values')
+plt.legend()
+
+# Residuos
+plt.subplot(1, 2, 2)
+residuals = mcmc.y_test - pred_y.mean(axis=0)
+plt.plot(residuals, label='Residuals')
+plt.title('Residuals')
+plt.xlabel('Data Points')
+plt.ylabel('Residual Value')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
